@@ -1,0 +1,9 @@
+cursor = self._db_conn.execute("""
+            SELECT knowledge_fts.title, knowledge_meta.category,
+                   knowledge_meta.filepath, knowledge_meta.mtime
+            FROM knowledge_fts
+            JOIN knowledge_meta USING (filepath)
+            WHERE knowledge_meta.mtime < ?
+            ORDER BY knowledge_meta.mtime ASC
+            LIMIT 20
+        """, (cutoff,))

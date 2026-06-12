@@ -1,0 +1,17 @@
+{
+  "name": "lucas-api-server",
+  "version": "1.0.0",
+  "description": "Lucas 台股交易系統 — 交易日記 + 行情 + 回測",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "http-proxy": "^1.18.1",
+    "sql.js": "^1.14.1"
+  }
+}

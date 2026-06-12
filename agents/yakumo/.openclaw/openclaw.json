@@ -1,0 +1,16 @@
+{
+  "extends": "~/.openclaw/openclaw.json",
+  "agentId": "yakumo",
+  "workspace": "~/.openclaw/workspace-your/agents/yakumo",
+  "identity": {
+    "name": "八雲",
+    "emoji": "🌸"
+  },
+  "heartbeat": {
+    "every": "30m"
+  },
+  "model": {
+    "primary": "nvidia-nim/deepseek-ai/deepseek-v4-flash"
+  },
+  "channels": {}
+}

@@ -1,0 +1,17 @@
+FROM node:20-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/workspace-your/agents/eve
+
+COPY agents/eve/package.json agents/eve/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY . /app/workspace-your
+
+ENV LUCAS_API_PORT=3080
+EXPOSE 3080
+
+CMD ["node", "lucas_api.js"]

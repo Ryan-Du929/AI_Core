@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧠 Lucas 團隊 — Agent 中樞</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f1a;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'Noto Sans TC', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    overflow: hidden;
+  }
+  
+  /* ── 地圖底板 ── */
+  .floor-grid {
+    position: absolute;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0;
+  }
+
+  /* ── Agent 卡片（浮在 agent 頭上） ── */
+  .agent-card {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    z-index: 10;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .agent-card .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    border: 2px solid rgba(255,255,255,0.3);
+    box-shadow: 0 0 20px rgba(100,150,255,0.2);
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .agent-card .avatar .status-ring {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #0f0f1a;
+  }
+  .status-ring.online { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  .status-ring.idle   { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+  .status-ring.busy   { background: #f87171; box-shadow: 0 0 8px #f87171; }
+  
+  .agent-card .name-tag {
+    background: rgba(0,0,0,0.7);
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .agent-card .task-badge {
+    background: rgba(0,0,0,0.6);
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: #94a3b8;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .agent-card .progress-bar {
+    width: 80px;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .agent-card .progress-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+    background: linear-gradient(90deg, #4ade80, #22d3ee);
+  }
+
+  /* ── 對話泡泡 ── */
+  .speech-bubble {
+    position: absolute;
+    background: rgba(0,0,0,0.85);
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-size: 11px;
+    max-width: 180px;
+    color: #e0e0e0;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08);
+    z-index: 20;
+    pointer-events: none;
+    animation: fadeUp 3s ease forwards;
+  }
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid rgba(0,0,0,0.85);
+  }
+  @keyframes fadeUp {
+    0% { opacity: 0; transform: translateY(10px); }
+    15% { opacity: 1; transform: translateY(0); }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-20px); }
+  }
+
+  /* ── 連線（任務流向） ── */
+  .connection-line {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* ── 底部狀態列 ── */
+  #footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(12px);
+    padding: 10px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    z-index: 50;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  #footer .task-summary { display: flex; gap: 20px; }
+  #footer .task-summary span { color: #94a3b8; }
+  #footer .task-summary strong { color: #e0e0e0; }
+
+  /* ── 對話框模組 ── */
+  #chat-panel {
+    position: absolute;
+    bottom: 60px;
+    right: 20px;
+    width: 300px;
+    max-height: 200px;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    z-index: 40;
+    padding: 12px;
+    overflow-y: auto;
+    display: none;
+  }
+  #chat-panel .msg { font-size: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  #chat-panel .msg .sender { font-weight: 600; color: #60a5fa; }
+  #chat-panel .msg .sender.yakumo { color: #f472b6; }
+  #chat-panel .msg .sender.system { color: #a78bfa; }
+
+  /* ── 動畫 keyframes ── */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(100,150,255,0.2); }
+    50% { box-shadow: 0 0 25px rgba(100,150,255,0.4); }
+  }
+  .agent-card .avatar {
+    animation: float 3s ease-in-out infinite, glow 2s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div class="floor-grid"></div>
+
+  <!-- Agent 卡片由 JS 動態生成 -->
+  <div id="agent-layer"></div>
+
+  <!-- SVG 連線層 -->
+  <svg id="connection-layer" style="position:absolute;inset:0;z-index:1;pointer-events:none;"></svg>
+
+  <!-- Activity Log 面板 -->
+  <div id="chat-panel"></div>
+
+  <!-- 底部狀態列 -->
+  <div id="footer">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:20px;">🧠</span>
+      <span style="font-weight:600;">Lucas 中樞</span>
+      <span style="color:#4ade80;font-size:10px;">●</span>
+      <span style="color:#94a3b8;font-size:12px;">系統正常</span>
+    </div>
+    <div class="task-summary">
+      <span>任務完成: <strong id="done-count">16</strong>/<strong id="total-count">17</strong></span>
+      <span>知識庫: <strong id="lesson-count">6</strong> lessons</span>
+      <span style="color:#4ade80;">🟢 <span id="agent-online">3</span> 在線</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// Agent 資料（硬編碼初版，後續可改為 fetch Render API）
+// ═══════════════════════════════════════════════════════════
+
+const AGENTS = [
+  {
+    id: 'lucas',
+    name: 'Lucas',
+    emoji: '🧠',
+    color: '#3b82f6',
+    bg: 'rgba(59,130,246,0.2)',
+    role: '團隊首腦 / 任務總管',
+    status: 'online',
+    currentTask: '監控系統狀態',
+    progress: 0.72,
+    x: 200, y: 180,
+    targetX: 200, targetY: 180,
+  },
+  {
+    id: 'yakumo',
+    name: '八雲',
+    emoji: '🌸',
+    color: '#ec4899',
+    bg: 'rgba(236,72,153,0.2)',
+    role: '祕書 / 需求釐清',
+    status: 'idle',
+    currentTask: '待命中',
+    progress: 0,
+    x: 100, y: 400,
+    targetX: 100, targetY: 400,
+  },
+  {
+    id: 'investment',
+    name: 'InvestmentAgent',
+    emoji: '📈',
+    color: '#22c55e',
+    bg: 'rgba(34,197,94,0.2)',
+    role: '投資顧問',
+    status: 'online',
+    currentTask: '查詢 2330 股價',
+    progress: 0.45,
+    x: 450, y: 300,
+    targetX: 450, targetY: 300,
+  },
+  {
+    id: 'tooldev',
+    name: 'ToolDevAgent',
+    emoji: '🛠',
+    color: '#f59e0b',
+    bg: 'rgba(245,158,11,0.2)',
+    role: '工具開發師',
+    status: 'idle',
+    currentTask: '等待任務',
+    progress: 0,
+    x: 650, y: 180,
+    targetX: 650, targetY: 180,
+  },
+  {
+    id: 'knowledge',
+    name: 'KnowledgeAgent',
+    emoji: '📚',
+    color: '#a78bfa',
+    bg: 'rgba(167,139,250,0.2)',
+    role: '知識管理師',
+    status: 'online',
+    currentTask: '索引知識庫',
+    progress: 0.88,
+    x: 650, y: 420,
+    targetX: 650, targetY: 420,
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+// 對話資料
+// ═══════════════════════════════════════════════════════════
+
+const ACTIVITY_LOG = [
+  { time: '00:47', sender: 'system', text: 'Lucas 啟動背景檢查' },
+  { time: '17:20', sender: 'system', text: 'API v3.1 部署完成 — Error Middleware + 429 Backoff' },
+  { time: '13:21', sender: 'system', text: '檔案退役整理完成' },
+  { time: '11:35', sender: 'lucas', text: 'lucas_api.js v3.0 測試通過，5/5' },
+  { time: '09:13', sender: 'system', text: 'Smart Chunking Patch 完成' },
+];
+
+// ═══════════════════════════════════════════════════════════
+// 初始化
+// ═══════════════════════════════════════════════════════════
+
+function init() {
+  renderAgents();
+  renderConnections();
+  renderActivityLog();
+  updateFooter();
+  startAnimationLoop();
+  startSpeechSimulation();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 渲染 Agent 卡片
+// ═══════════════════════════════════════════════════════════
+
+function renderAgents() {
+  const layer = document.getElementById('agent-layer');
+  layer.innerHTML = '';
+
+  AGENTS.forEach(function(a) {
+    const card = document.createElement('div');
+    card.className = 'agent-card';
+    card.id = 'agent-' + a.id;
+    card.style.left = a.x + 'px';
+    card.style.top = a.y + 'px';
+
+    // Avatar
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.style.borderColor = a.color;
+    avatar.style.background = a.bg;
+    avatar.textContent = a.emoji;
+
+    // Status ring
+    const ring = document.createElement('div');
+    ring.className = 'status-ring ' + a.status;
+    avatar.appendChild(ring);
+    card.appendChild(avatar);
+
+    // Name tag
+    const tag = document.createElement('div');
+    tag.className = 'name-tag';
+    tag.style.borderColor = a.color;
+    tag.style.color = a.color;
+    tag.textContent = a.name;
+    card.appendChild(tag);
+
+    // Role
+    const role = document.createElement('div');
+    role.className = 'task-badge';
+    role.textContent = a.role;
+    card.appendChild(role);
+
+    // Current task
+    const taskEl = document.createElement('div');
+    taskEl.className = 'task-badge';
+    taskEl.id = 'task-' + a.id;
+    taskEl.textContent = a.currentTask;
+    card.appendChild(taskEl);
+
+    // Progress bar
+    const bar = document.createElement('div');
+    bar.className = 'progress-bar';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.id = 'progress-' + a.id;
+    fill.style.width = (a.progress * 100) + '%';
+    fill.style.background = 'linear-gradient(90deg, ' + a.color + ', #22d3ee)';
+    bar.appendChild(fill);
+    card.appendChild(bar);
+
+    layer.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// 渲染連線（SVG）
+// ═══════════════════════════════════════════════════════════
+
+function renderConnections() {
+  const svg = document.getElementById('connection-layer');
+  const connections = [
+    { from: 'lucas', to: 'investment' },
+    { from: 'lucas', to: 'tooldev' },
+    { from: 'lucas', to: 'knowledge' },
+    { from: 'yakumo', to: 'lucas' },
+  ];
+
+  let paths = '';
+  connections.forEach(function(c) {
+    const a1 = getAgent(c.from);
+    const a2 = getAgent(c.target);
+    if (!a1 || !a2) return;
+    const x1 = a1.x;
+    const y1 = a1.y - 28;
+    const x2 = a2.x;
+    const y2 = a2.y - 28;
+    const cx = (x1 + x2) / 2;
+    const cy = Math.min(y1, y2) - 40;
+    paths += '<path d="M' + x1 + ' ' + y1 + ' Q' + cx + ' ' + cy + ', ' + x2 + ' ' + y2 + '" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" fill="none" stroke-dasharray="6,4"/>';
+  });
+  svg.innerHTML = '<defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10" fill="rgba(255,255,255,0.15)"/></marker></defs>' + paths;
+}
+
+function getAgent(id) {
+  for (var i = 0; i < AGENTS.length; i++) {
+    if (AGENTS[i].id === id) return AGENTS[i];
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Activity Log
+// ═══════════════════════════════════════════════════════════
+
+function renderActivityLog() {
+  const panel = document.getElementById('chat-panel');
+  panel.innerHTML = '';
+  ACTIVITY_LOG.slice().reverse().forEach(function(log) {
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    const senderClass = log.sender !== 'system' ? log.sender : 'system';
+    msg.innerHTML = '<span class="sender ' + senderClass + '">[' + log.time + '] ' + log.sender + '</span> ' + log.text;
+    panel.appendChild(msg);
+  });
+  panel.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════════
+// Footer 更新
+// ═══════════════════════════════════════════════════════════
+
+function updateFooter() {
+  var online = 0;
+  AGENTS.forEach(function(a) {
+    if (a.status === 'online' || a.status === 'busy') online++;
+  });
+  document.getElementById('agent-online').textContent = online;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 動畫循環 — 隨機走動 + 更新狀態
+// ═══════════════════════════════════════════════════════════
+
+function startAnimationLoop() {
+  // 每 3-6 秒隨機移動一個 agent
+  setInterval(function() {
+    var idx = Math.floor(Math.random() * AGENTS.length);
+    var a = AGENTS[idx];
+    if (a.status === 'busy') return; // busy 的原地不動
+
+    // 在畫面範圍內隨機移動
+    var margin = 120;
+    var maxW = window.innerWidth - margin;
+    var maxH = window.innerHeight - margin - 60;
+    a.targetX = margin + Math.random() * (maxW - margin);
+    a.targetY = margin + Math.random() * (maxH - margin);
+
+    // 移動過程中小步前進
+    var steps = 20 + Math.floor(Math.random() * 20);
+    var dx = (a.targetX - a.x) / steps;
+    var dy = (a.targetY - a.y) / steps;
+    var step = 0;
+
+    var moveInterval = setInterval(function() {
+      if (step >= steps) {
+        clearInterval(moveInterval);
+        a.x = a.targetX;
+        a.y = a.targetY;
+        updateAgentPosition(a);
+        return;
+      }
+      a.x += dx;
+      a.y += dy;
+      updateAgentPosition(a);
+      step++;
+    }, 80);
+  }, 5000 + Math.random() * 3000);
+}
+
+function updateAgentPosition(a) {
+  var card = document.getElementById('agent-' + a.id);
+  if (card) {
+    card.style.left = a.x + 'px';
+    card.style.top = a.y + 'px';
+  }
+  // 也更新連線
+  renderConnections();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 模擬對話泡泡
+// ═══════════════════════════════════════════════════════════
+
+const SPEECHES = {
+  lucas: ['確認系統狀態中⋯', '任務分配完成', '分析報告就緒'],
+  yakumo: ['主人的需求已記錄', '已轉交給 Lucas', '需要我再確認一次嗎？'],
+  investment: ['2330 收盤價 2255', 'MA5 向上突破 MA20', '持倉報告已產出'],
+  tooldev: ['scraper 腳本生成完畢', 'pipeline 設計中⋯', 'Review 完成，無重大問題'],
+  knowledge: ['索引更新完成', '新 lessons 已歸檔', '陳舊文件標記完畢'],
+};
+
+function startSpeechSimulation() {
+  setInterval(function() {
+    AGENTS.forEach(function(a) {
+      if (a.status === 'idle') return;
+      if (Math.random() > 0.3) return; // 30% 機率說話
+
+      var speeches = SPEECHES[a.id] || ['工作中⋯'];
+      var text = speeches[Math.floor(Math.random() * speeches.length)];
+
+      showSpeech(a, text);
+    });
+  }, 8000);
+}
+
+function showSpeech(agent, text) {
+  var container = document.getElementById('game-container');
+  var bubble = document.createElement('div');
+  bubble.className = 'speech-bubble';
+  bubble.textContent = text;
+  bubble.style.left = (agent.x - 80) + 'px';
+  bubble.style.top = (agent.y - 110) + 'px';
+  container.appendChild(bubble);
+
+  setTimeout(function() {
+    bubble.remove();
+  }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 啟動
+// ═══════════════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

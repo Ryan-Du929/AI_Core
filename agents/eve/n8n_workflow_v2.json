@@ -1,0 +1,430 @@
+{
+  "name": "Lucas AI - Full Router v2 (Channel + Keyword)",
+  "nodes": [
+    {
+      "id": "1d1d283b-b132-4724-888b-7897be2867c9",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        -48
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-in",
+        "options": {}
+      },
+      "webhookId": "f801a11a"
+    },
+    {
+      "id": "0345b61d-5208-4716-8643-1a9ff7f4c8b0",
+      "name": "Code: Parse Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -48
+      ],
+      "parameters": {
+        "jsCode": "// Extract and normalize Discord payload\nconst body = $input.first().json.body || $input.first().json;\nconst content = (body.content || '').trim();\nconst channel_id = body.channel_id || (body.message ? body.message.channel_id : '');\nconst author = body.author || (body.message ? body.message.author : {});\nconst message_id = body.id || (body.message ? body.message.id : '');\n\n// Detect if message mentions Lucas\nconst mentionsLucas = /lucas/i.test(content);\n\n// Determine profile based on channel and content\nlet profile = 'brain';  // default\nif (channel_id === '1506345048625905816') {\n    profile = 'brain';  // #ryan-private → Lucas brain\n} else if (channel_id === '1506239471325020327') {\n    profile = 'secretary';  // #大廳 → 八雲 secretary\n}\n// If content mentions Lucas, override to brain\nif (mentionsLucas) {\n    profile = 'brain';\n}\n\nreturn {\n    content,\n    channel_id,\n    message_id,\n    author_id: author.id || '',\n    author_name: author.username || author.globalName || '',\n    mentionsLucas,\n    profile,\n    taskId: `n8n-${message_id || Date.now()}`,\n};\n"
+      }
+    },
+    {
+      "id": "a41356f0-b885-49bd-93a8-8bdafec4ba50",
+      "name": "IF: Mentions Lucas",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -48
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "43377159-54d",
+              "leftValue": "={{ $json.mentionsLucas }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "67b8a2b8-de6d-4efb-82f9-05c8d8e73199",
+      "name": "Switch: Channel Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        128
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "e4dc9496-42b",
+                    "leftValue": "={{ $json.channel_id }}",
+                    "rightValue": "1506345048625905816",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "2a9a934b-6f4",
+                    "leftValue": "={{ $json.channel_id }}",
+                    "rightValue": "1506239471325020327",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c4df56cf-a13d-47fb-8aeb-2e99eb69a359",
+      "name": "HTTP Request: Lucas API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        384,
+        -192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3080/api/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "taskId",
+              "value": "={{ $json.taskId }}"
+            },
+            {
+              "name": "channel_id",
+              "value": "={{ $json.channel_id }}"
+            },
+            {
+              "name": "user_name",
+              "value": "={{ $json.author_name }}"
+            },
+            {
+              "name": "profile",
+              "value": "={{ $json.profile }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "0f53e383-e242-407f-86d7-4e098d9676a6",
+      "name": "HTTP Request: Lucas (via Channel)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        384,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3080/api/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "taskId",
+              "value": "={{ $json.taskId }}"
+            },
+            {
+              "name": "channel_id",
+              "value": "={{ $json.channel_id }}"
+            },
+            {
+              "name": "user_name",
+              "value": "={{ $json.author_name }}"
+            },
+            {
+              "name": "profile",
+              "value": "={{ $json.profile }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "0aaab9e4-032e-4a90-a8e9-50955e3b84b3",
+      "name": "Code: Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        -96
+      ],
+      "parameters": {
+        "jsCode": "// Format lucas_api response for Discord\nconst resp = $input.first().json;\nlet message = '';\n\nif (resp.status === 'success') {\n    message = resp.data;\n    const agentLabel = resp.agent && resp.agent !== 'llm' ? `[${resp.agent}] ` : '';\n    const timeLabel = resp.elapsed ? ` \\`(${Math.round(resp.elapsed/1000)}s)\\`` : '';\n    message = agentLabel + message + timeLabel;\n} else {\n    message = `❌ 處理失敗：${resp.data || '未知錯誤'}`;\n}\n\nreturn { content: message, channel_id: $json.channel_id };\n"
+      }
+    },
+    {
+      "id": "b80f1e9c-754d-47e4-a5b3-170688d454bb",
+      "name": "Discord Send (#ryan-private)",
+      "type": "@jordanburke/n8n-nodes-discord.discord",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -192
+      ],
+      "parameters": {
+        "channelId": "1506345048625905816",
+        "content": "={{ $json.content }}"
+      },
+      "credentials": {
+        "discordApi": {
+          "id": "A6a32tAayRv8SyRz",
+          "name": "Discord App account"
+        }
+      }
+    },
+    {
+      "id": "2f0aa52d-15c8-486a-9881-5731711f7e2e",
+      "name": "Discord Send (Dynamic Channel)",
+      "type": "@jordanburke/n8n-nodes-discord.discord",
+      "typeVersion": 1,
+      "position": [
+        800,
+        80
+      ],
+      "parameters": {
+        "channelId": "={{ $json.channel_id }}",
+        "content": "={{ $json.content }}"
+      },
+      "credentials": {
+        "discordApi": {
+          "id": "A6a32tAayRv8SyRz",
+          "name": "Discord App account"
+        }
+      }
+    },
+    {
+      "id": "621a5ae2-6fe2-4059-bff9-72cda0e6fb7d",
+      "name": "NoOp (Fallback)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        384,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3b220691-1267-4590-91bb-39e211109512",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        256
+      ],
+      "parameters": {
+        "jsCode": "// Error handler - log and return friendly message\nconst error = $input.first().json;\nconsole.error('Workflow error:', JSON.stringify(error));\nreturn {\n    content: '❌ 處理時發生錯誤，請稍後再試。',\n    channel_id: error.channel_id || '',\n};\n"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse Payload": {
+      "main": [
+        [
+          {
+            "node": "IF: Mentions Lucas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch: Channel Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Mentions Lucas": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Lucas API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch: Channel Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Channel Router": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Lucas (via Channel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request: Lucas (via Channel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NoOp (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Lucas API": {
+      "main": [
+        [
+          {
+            "node": "Code: Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Lucas (via Channel)": {
+      "main": [
+        [
+          {
+            "node": "Code: Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Format Response": {
+      "main": [
+        [
+          {
+            "node": "Discord Send (#ryan-private)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discord Send (Dynamic Channel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NoOp (Fallback)": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Discord Send (Dynamic Channel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}

@@ -1,0 +1,159 @@
+{
+  "name": "AI Agent - Production v6 (Full Stack Router)",
+  "nodes": [
+    {
+      "id": "355e2276-72e6-4a1f-8a49-716ac706bbae",
+      "name": "Discord Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-prod-final",
+        "options": {}
+      },
+      "webhookId": "prod-final-webhook"
+    },
+    {
+      "id": "5508446b-4c71-4622-962d-b90e8b2f30bb",
+      "name": "Code: Parse Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst content = (body.content || '').trim();\nconst channel_id = body.channel_id || (body.message ? body.message.channel_id : '');\nconst author = body.author || (body.message ? body.message.author : {});\nconst message_id = body.id || (body.message ? body.message.id : String(Date.now()));\nconst mentionsLucas = /lucas/i.test(content);\nconst mentionsHermes = /hermes/i.test(content);\nconst author_name = (author.username || author.globalName || author.id || 'unknown');\nlet route = 'lucas';\nif (channel_id === '1506239471325020327' && !mentionsLucas && !mentionsHermes) {\n  route = 'secretary';\n}\nif (mentionsHermes) { route = 'hermes'; }\nif (mentionsLucas) { route = 'lucas'; }\nlet profile = 'brain';\nif (route === 'secretary') { profile = 'secretary'; }\nreturn [{\n  json: {\n    content: content,\n    channel_id: channel_id,\n    author_name: author_name,\n    author_id: (author.id || ''),\n    message_id: message_id,\n    route: route,\n    profile: profile,\n    taskId: 'n8n-' + (message_id || Date.now())\n  }\n}];"
+      }
+    },
+    {
+      "id": "d9df8cda-e171-4e21-bcb5-d55f1daae45f",
+      "name": "HTTP: Lucas API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        200,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://myai-lucas-api-1:3080/api/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "taskId",
+              "value": "={{ $json.taskId }}"
+            },
+            {
+              "name": "channel_id",
+              "value": "={{ $json.channel_id }}"
+            },
+            {
+              "name": "user_name",
+              "value": "={{ $json.author_name }}"
+            },
+            {
+              "name": "profile",
+              "value": "={{ $json.profile }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "c5f8f77c-d9d9-4bdb-a9dc-b5c792f5cf32",
+      "name": "Code: Smart Chunking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst ch = $json.channel_id || '';\nlet raw = '';\nif (resp.status === 'success') {\n  raw = resp.data;\n  const ag = resp.agent && resp.agent !== 'llm' ? '[' + resp.agent + '] ' : '';\n  const tm = resp.elapsed ? ' (' + Math.round(resp.elapsed / 1000) + 's)' : '';\n  raw = ag + raw.trim() + tm;\n} else { raw = '处理失败: ' + (resp.data || '未知错误'); }\nif (!raw) return [{json:{content:'回复为空',channel_id:ch}}];\nconst MAX=1900,s=[];let r=raw;\nwhile(r.length>MAX){\n  let c=MAX;\n  let se=Math.max(r.lastIndexOf('。',c),r.lastIndexOf('！',c),r.lastIndexOf('？',c));\n  if(se>MAX*0.4){c=se+1;}else{let sp=Math.max(r.lastIndexOf(' ',c),r.lastIndexOf('，',c));if(sp>MAX*0.2){c=sp+1;}}\n  s.push(r.slice(0,c).trim());r=r.slice(c).trim();\n}\nif(r)s.push(r);\nif(s.length>1)return s.map((x,i)=>({json:{content:(i+1)+'/'+s.length+' '+x,channel_id:ch}}));\nreturn[{json:{content:s[0],channel_id:ch}}];"
+      }
+    },
+    {
+      "id": "3c0f062e-c887-43bd-b02a-b59fdde0495e",
+      "name": "Discord Send",
+      "type": "@jordanburke/n8n-nodes-discord.discord",
+      "typeVersion": 1,
+      "position": [
+        600,
+        -120
+      ],
+      "parameters": {
+        "channelId": "={{ $json.channel_id }}",
+        "content": "={{ $json.content }}"
+      },
+      "credentials": {
+        "discordApi": {
+          "id": "A6a32tAayRv8SyRz",
+          "name": "Discord App account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Lucas API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Lucas API": {
+      "main": [
+        [
+          {
+            "node": "Code: Smart Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Smart Chunking": {
+      "main": [
+        [
+          {
+            "node": "Discord Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

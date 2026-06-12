@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucas 台股看盤 Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117; color: #c9d1d9; padding: 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 0; border-bottom: 1px solid #30363d; margin-bottom: 24px;
+  }
+  .header h1 { font-size: 24px; font-weight: 600; color: #58a6ff; }
+  .header .time { color: #8b949e; font-size: 14px; }
+  .header .badge {
+    background: #1f2937; padding: 6px 14px; border-radius: 20px;
+    font-size: 13px; color: #7ee787;
+  }
+
+  .search-bar {
+    display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap;
+  }
+  .search-bar input {
+    flex: 1; min-width: 200px; padding: 10px 16px; border-radius: 8px;
+    border: 1px solid #30363d; background: #161b22; color: #c9d1d9;
+    font-size: 15px;
+  }
+  .search-bar input:focus { outline: none; border-color: #58a6ff; }
+  .search-bar button {
+    padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 500;
+  }
+  .btn-primary { background: #238636; color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn-secondary:hover { background: #30363d; }
+  .btn-danger { background: #da3633; color: #fff; }
+  .btn-danger:hover { background: #f85149; }
+
+  .quick-stocks {
+    display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;
+  }
+  .stock-chip {
+    padding: 8px 16px; border-radius: 20px; background: #161b22;
+    border: 1px solid #30363d; cursor: pointer; font-size: 13px;
+    transition: all 0.2s;
+  }
+  .stock-chip:hover { border-color: #58a6ff; background: #1c2128; }
+  .stock-chip .up { color: #7ee787; }
+  .stock-chip .down { color: #f85149; }
+
+  .grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    padding: 20px; min-height: 200px;
+  }
+  .card h2 {
+    font-size: 16px; font-weight: 600; margin-bottom: 16px;
+    color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .card.full { grid-column: 1 / -1; }
+
+  .stock-price {
+    font-size: 42px; font-weight: 700; line-height: 1.2;
+  }
+  .stock-change {
+    font-size: 18px; margin-top: 4px;
+  }
+  .stock-meta {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px;
+  }
+  .stock-meta-item {
+    display: flex; justify-content: space-between; padding: 8px 0;
+    border-bottom: 1px solid #21262d; font-size: 14px;
+  }
+  .stock-meta-item .label { color: #8b949e; }
+  .stock-meta-item .value { font-weight: 500; }
+
+  .watchlist-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid #21262d; cursor: pointer;
+  }
+  .watchlist-item:last-child { border-bottom: none; }
+  .watchlist-item .name { font-weight: 500; }
+  .watchlist-item .code { color: #8b949e; font-size: 13px; }
+  .watchlist-item .price { font-weight: 600; font-size: 16px; }
+  .watchlist-item .change { font-size: 13px; }
+
+  .chart-placeholder {
+    height: 200px; display: flex; align-items: center; justify-content: center;
+    color: #484f58; font-size: 14px; border: 2px dashed #21262d;
+    border-radius: 8px;
+  }
+
+  .loading {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid #30363d; border-top-color: #58a6ff;
+    border-radius: 50%; animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 100; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+  }
+  .modal h2 { margin-bottom: 16px; }
+  .modal input, .modal select {
+    width: 100%; padding: 10px; margin-bottom: 12px;
+    border: 1px solid #30363d; border-radius: 6px;
+    background: #0d1117; color: #c9d1d9; font-size: 14px;
+  }
+  .modal .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+  .portfolio-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .portfolio-table th {
+    text-align: left; padding: 10px 8px; border-bottom: 2px solid #30363d;
+    color: #8b949e; font-weight: 500; font-size: 12px; text-transform: uppercase;
+  }
+  .portfolio-table td {
+    padding: 10px 8px; border-bottom: 1px solid #21262d;
+  }
+  .portfolio-table tr:hover td { background: #1c2128; }
+
+  .alert {
+    padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;
+  }
+  .alert-error { background: #3d1e1e; border: 1px solid #da3633; color: #f85149; }
+  .alert-info { background: #1c3050; border: 1px solid #1f6feb; color: #58a6ff; }
+
+  .news-item {
+    padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 14px;
+  }
+  .news-item:last-child { border-bottom: none; }
+  .news-item a {
+    color: #c9d1d9; text-decoration: none; display: block;
+  }
+  .news-item a:hover { color: #58a6ff; }
+  .news-item .news-meta { color: #8b949e; font-size: 12px; margin-top: 4px; }
+  .news-item .news-source { color: #58a6ff; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>🧠 Lucas 台股看盤</h1>
+      <div class="time" id="currentTime">載入中...</div>
+    </div>
+    <div>
+      <span class="badge" id="marketBadge">🔴 盤後</span>
+      <span class="badge" style="margin-left:8px;">FinMind 資料源</span>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="stockInput" placeholder="輸入股號（ex: 2330）"
+           onkeydown="if(event.key==='Enter') searchStock()">
+    <button class="btn-primary" onclick="searchStock()">🔍 查詢</button>
+    <button class="btn-secondary" onclick="showAddModal()">+ 加入自選</button>
+    <button class="btn-secondary" onclick="refreshAll()">🔄 刷新</button>
+  </div>
+
+  <!-- Quick stocks -->
+  <div class="quick-stocks" id="quickStocks"></div>
+
+  <!-- Alert area -->
+  <div id="alertArea"></div>
+
+  <div class="grid">
+    <!-- Stock Detail -->
+    <div class="card" id="stockDetailCard">
+      <h2>📊 股價詳細</h2>
+      <div id="stockDetail">
+        <div style="color:#484f58;text-align:center;padding:40px 0;">
+          在上方搜尋股號或點擊快速查詢
+        </div>
+      </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="card" id="watchlistCard">
+      <h2>⭐ 自選股</h2>
+      <div id="watchlistContent">
+        <div style="color:#484f58;text-align:center;padding:40px 0;">
+          尚未加入自選股
+        </div>
+      </div>
+    </div>
+
+    <!-- Portfolio -->
+    <div class="card full" id="portfolioCard">
+      <h2>💼 持倉管理</h2>
+      <div id="portfolioContent">
+        <div style="color:#484f58;text-align:center;padding:30px 0;">
+          <p>尚無持倉資料。點擊下方按鈕新增。</p>
+          <button class="btn-primary" style="margin-top:12px;" onclick="showPortfolioModal()">+ 新增持倉</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- News -->
+    <div class="card full" id="newsCard">
+      <h2>📰 即時新聞</h2>
+      <div id="newsContent">
+        <div style="color:#484f58;text-align:center;padding:30px 0;">
+          <div class="loading"></div> 載入中...
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Watchlist Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2>⭐ 加入自選股</h2>
+    <input type="text" id="addStockInput" placeholder="股號（ex: 2330）" onkeydown="if(event.key==='Enter') addToWatchlist()">
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="closeModal('addModal')">取消</button>
+      <button class="btn-primary" onclick="addToWatchlist()">加入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Portfolio Modal -->
+<div class="modal-overlay" id="portfolioModal">
+  <div class="modal">
+    <h2>💼 新增持倉</h2>
+    <input type="text" id="portfolioCode" placeholder="股號（ex: 2330）">
+    <input type="number" id="portfolioShares" placeholder="股數" step="1">
+    <input type="number" id="portfolioPrice" placeholder="買入均價" step="0.01">
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="closeModal('portfolioModal')">取消</button>
+      <button class="btn-primary" onclick="addPortfolio()">新增</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════
+const STATE = {
+  watchlist: JSON.parse(localStorage.getItem('lucas_watchlist') || '["2330","2317","2454"]'),
+  portfolio: JSON.parse(localStorage.getItem('lucas_portfolio') || '[]'),
+  stocks: {},
+  selectedCode: null,
+};
+
+// ═══════════════════════════════════════════════
+// FinMind API — 直接前端呼叫（CORS open ✅）
+// ═══════════════════════════════════════════════
+const FINMIND_BASE = 'https://api.finmindtrade.com/api/v4';
+
+function fmtDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+async function fetchFinMindPrice(code) {
+  // 取最近 31 天的日資料（算月均需要一個月）
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 35); // 多抓幾天確保有足夠交易日
+  const url = `${FINMIND_BASE}/data?dataset=TaiwanStockPrice&data_id=${code}` +
+              `&start_date=${fmtDate(start)}&end_date=${fmtDate(end)}`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json();
+  if (json.status !== 200) throw new Error(json.msg || 'FinMind error');
+  return json.data || [];
+}
+
+// ═══════════════════════════════════════════════
+// Stock Price Fetching
+// ═══════════════════════════════════════════════
+async function fetchStockPrice(code) {
+  try {
+    const records = await fetchFinMindPrice(code);
+
+    if (!records || records.length === 0) {
+      console.warn(`No data for ${code}`);
+      return null;
+    }
+
+    // 取最新的 record
+    const latest = records[records.length - 1];
+
+    // 計算月均價：取最近 30 自然日的收盤價平均
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDayStr = fmtDate(thirtyDaysAgo);
+    const recent = records.filter(r => r.date >= thirtyDayStr);
+    const monthlyAvg = recent.length > 0
+      ? recent.reduce((sum, r) => sum + r.close, 0) / recent.length
+      : null;
+
+    return {
+      code: latest.stock_id,
+      name: latest.stock_id, // FinMind 不加 name，從 TaiwanStockInfo 拿
+      date: latest.date,
+      close: latest.close,
+      open: latest.open,
+      high: latest.max,
+      low: latest.min,
+      volume: latest.Trading_Volume,
+      spread: latest.spread,
+      monthlyAvg: monthlyAvg ? Math.round(monthlyAvg * 100) / 100 : null,
+    };
+  } catch (e) {
+    console.error(`fetchStockPrice(${code}):`, e);
+    return null;
+  }
+}
+
+async function fetchStockName(code) {
+  try {
+    const url = `${FINMIND_BASE}/data?dataset=TaiwanStockInfo&data_id=${code}`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    if (json.data && json.data.length > 0) {
+      return json.data[0].stock_name || code;
+    }
+  } catch (e) { /* ignore */ }
+  return code;
+}
+
+// ═══════════════════════════════════════════════
+// News — 從 GitHub raw 或公開 RSS
+// ═══════════════════════════════════════════════
+async function fetchNews() {
+  // 使用 corsproxy.io 代理 Google News 台股 RSS
+  const rssUrl = encodeURIComponent(
+    'https://news.google.com/rss/search?q=%E5%8F%B0%E8%82%A1+%E8%82%A1%E5%B8%82&hl=zh-TW&gl=TW&ceid=TW:zh-Hant'
+  );
+  const proxyUrl = `https://api.allorigins.win/raw?url=${rssUrl}`;
+  try {
+    const resp = await fetch(proxyUrl);
+    const xml = await resp.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'text/xml');
+    const items = doc.querySelectorAll('item');
+    const news = [];
+    items.forEach(item => {
+      const title = item.querySelector('title')?.textContent || '';
+      const link = item.querySelector('link')?.textContent || '';
+      const pubDate = item.querySelector('pubDate')?.textContent || '';
+      const source = item.querySelector('source')?.textContent || 'Google News';
+      news.push({ title, link, date: pubDate, source });
+    });
+    return news.slice(0, 15);
+  } catch (e) {
+    console.error('fetchNews:', e);
+    // fallback: 用 finmind 的 TaiwanStockNews (如果有 token)
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// UI Rendering
+// ═══════════════════════════════════════════════
+
+function showAlert(msg, type = 'error') {
+  const area = document.getElementById('alertArea');
+  area.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(() => area.innerHTML = '', 5000);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function showAddModal() {
+  document.getElementById('addModal').classList.add('show');
+  document.getElementById('addStockInput').focus();
+}
+
+function showPortfolioModal() {
+  document.getElementById('portfolioModal').classList.add('show');
+  document.getElementById('portfolioCode').focus();
+}
+
+function formatPrice(v) { return (v || 0).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function formatVolume(v) {
+  if (!v) return '-';
+  if (v >= 100000000) return (v / 100000000).toFixed(2) + '億';
+  if (v >= 10000) return (v / 10000).toFixed(0) + '萬';
+  return v.toLocaleString();
+}
+
+function formatChange(v) { return (v >= 0 ? '+' : '') + v.toFixed(2); }
+function changeClass(v) { return v >= 0 ? 'up' : 'down'; }
+
+function updateMarketBadge() {
+  const now = new Date();
+  const tw = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+  const h = tw.getHours();
+  const d = tw.getDay();
+  const badge = document.getElementById('marketBadge');
+  // 台股交易時間 09:00-13:30 週一~五
+  if (d >= 1 && d <= 5 && h >= 9 && h < 13.5) {
+    badge.textContent = '🟢 盤中';
+    badge.style.color = '#7ee787';
+  } else if (d >= 1 && d <= 5 && h >= 13.5 && h < 14) {
+    badge.textContent = '🟡 收盤中';
+    badge.style.color = '#d29922';
+  } else {
+    badge.textContent = '🔴 盤後';
+    badge.style.color = '#f85149';
+  }
+}
+
+// Quick stocks
+function renderQuickStocks() {
+  const container = document.getElementById('quickStocks');
+  const stocks = STATE.watchlist.slice(0, 8);
+  container.innerHTML = stocks.map(code => {
+    const s = STATE.stocks[code];
+    const change = s && s.close && s.monthlyAvg ? s.close - s.monthlyAvg : null;
+    return `<div class="stock-chip" onclick="selectStock('${code}')">
+      ${code} ${s ? (s.name || '') : ''}
+      ${s && s.close ? `<span class="${changeClass(change)}">${formatPrice(s.close)}</span>` : '<span class="loading"></span>'}
+    </div>`;
+  }).join('');
+}
+
+// Stock detail
+function selectStock(code) {
+  STATE.selectedCode = code;
+  renderStockDetail(code);
+  renderWatchlist();
+}
+
+async function renderStockDetail(code) {
+  const el = document.getElementById('stockDetail');
+  el.innerHTML = '<div style="text-align:center;padding:20px;"><div class="loading"></div> 查詢中...</div>';
+
+  // Fetch if not cached
+  if (!STATE.stocks[code]) {
+    const [data, name] = await Promise.all([
+      fetchStockPrice(code),
+      fetchStockName(code)
+    ]);
+    if (data) {
+      data.name = name;
+      STATE.stocks[code] = data;
+    }
+  }
+
+  const s = STATE.stocks[code];
+  if (!s || !s.close) {
+    el.innerHTML = '<div style="color:#f85149;text-align:center;padding:40px 0;">查詢失敗，請確認股號是否正確</div>';
+    return;
+  }
+
+  const change = s.close - (s.monthlyAvg || s.close);
+  const changePct = s.monthlyAvg ? ((change / s.monthlyAvg) * 100) : 0;
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-size:18px;font-weight:500;">${s.code} ${s.name}</div>
+        <div class="stock-price ${changeClass(change)}">${formatPrice(s.close)}</div>
+        <div class="stock-change ${changeClass(change)}">
+          ${formatChange(change)} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%)
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="color:#8b949e;font-size:13px;">${s.date || ''}</div>
+        <button class="btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px;"
+                onclick="removeFromWatchlist('${code}')">移除自選</button>
+      </div>
+    </div>
+    <div class="stock-meta">
+      <div class="stock-meta-item"><span class="label">收盤價</span><span class="value">${formatPrice(s.close)}</span></div>
+      <div class="stock-meta-item"><span class="label">月均價</span><span class="value">${formatPrice(s.monthlyAvg || 0)}</span></div>
+      <div class="stock-meta-item"><span class="label">漲跌</span><span class="value ${changeClass(change)}">${formatChange(change)}</span></div>
+      <div class="stock-meta-item"><span class="label">漲跌幅</span><span class="value ${changeClass(change)}">${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%</span></div>
+      <div class="stock-meta-item"><span class="label">開盤</span><span class="value">${formatPrice(s.open)}</span></div>
+      <div class="stock-meta-item"><span class="label">最高</span><span class="value">${formatPrice(s.high)}</span></div>
+      <div class="stock-meta-item"><span class="label">最低</span><span class="value">${formatPrice(s.low)}</span></div>
+      <div class="stock-meta-item"><span class="label">成交量</span><span class="value">${formatVolume(s.volume)}</span></div>
+    </div>
+    <div class="chart-placeholder" style="margin-top:16px;">
+      📈 技術線圖（待開發）
+    </div>
+  `;
+}
+
+// Watchlist
+function renderWatchlist() {
+  const el = document.getElementById('watchlistContent');
+  if (STATE.watchlist.length === 0) {
+    el.innerHTML = '<div style="color:#484f58;text-align:center;padding:40px 0;">尚未加入自選股</div>';
+    return;
+  }
+
+  el.innerHTML = STATE.watchlist.map(code => {
+    const s = STATE.stocks[code];
+    const change = s && s.close && s.monthlyAvg ? s.close - s.monthlyAvg : null;
+    const isSelected = STATE.selectedCode === code;
+    return `<div class="watchlist-item" style="${isSelected ? 'background:#1c2128;border-radius:6px;padding:10px 8px;' : ''}"
+                onclick="selectStock('${code}')">
+      <div>
+        <div class="name">${s ? s.name || code : code}</div>
+        <div class="code">${code}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="price">${s && s.close ? formatPrice(s.close) : '<span class="loading"></span>'}</div>
+        ${change !== null ? `<div class="change ${changeClass(change)}">${formatChange(change)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Portfolio
+function renderPortfolio() {
+  const el = document.getElementById('portfolioContent');
+  if (STATE.portfolio.length === 0) {
+    el.innerHTML = `<div style="color:#484f58;text-align:center;padding:30px 0;">
+      <p>尚無持倉資料。</p>
+      <button class="btn-primary" style="margin-top:12px;" onclick="showPortfolioModal()">+ 新增持倉</button>
+    </div>`;
+    return;
+  }
+
+  let totalValue = 0, totalCost = 0;
+  const rows = STATE.portfolio.map((item, i) => {
+    const s = STATE.stocks[item.code];
+    const currentPrice = s ? s.close : 0;
+    const cost = item.shares * item.price;
+    const value = item.shares * currentPrice;
+    const gain = value - cost;
+    const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
+    totalCost += cost;
+    totalValue += value;
+    return `<tr>
+      <td><strong>${item.code}</strong></td>
+      <td>${item.shares.toLocaleString()}</td>
+      <td>${formatPrice(item.price)}</td>
+      <td>${formatPrice(currentPrice)}</td>
+      <td>${formatPrice(cost)}</td>
+      <td>${formatPrice(value)}</td>
+      <td class="${changeClass(gain)}">${formatPrice(gain)}</td>
+      <td class="${changeClass(gain)}">${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(2)}%</td>
+      <td><button class="btn-danger" style="padding:4px 10px;font-size:12px;" onclick="removePortfolio(${i})">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const totalGain = totalValue - totalCost;
+  const totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="color:#8b949e;">總成本：</span>
+        <strong>${formatPrice(totalCost)}</strong>
+      </div>
+      <div>
+        <span style="color:#8b949e;">總市值：</span>
+        <strong>${formatPrice(totalValue)}</strong>
+      </div>
+      <div class="${changeClass(totalGain)}">
+        <span style="color:#8b949e;">損益：</span>
+        <strong>${formatPrice(totalGain)} (${totalGainPct >= 0 ? '+' : ''}${totalGainPct.toFixed(2)}%)</strong>
+      </div>
+      <button class="btn-primary" onclick="showPortfolioModal()" style="font-size:12px;padding:6px 14px;">+ 新增</button>
+    </div>
+    <table class="portfolio-table">
+      <thead><tr>
+        <th>股票</th><th>股數</th><th>買入價</th><th>現價</th><th>成本</th><th>市值</th><th>損益</th><th>報酬率</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// News
+async function renderNews() {
+  const el = document.getElementById('newsContent');
+  try {
+    el.innerHTML = '<div style="text-align:center;padding:20px;"><div class="loading"></div> 載入新聞中...</div>';
+
+    const news = await fetchNews();
+
+    if (!news || news.length === 0) {
+      el.innerHTML = '<div style="color:#484f58;padding:20px 0;">暫時無新聞資料</div>';
+      return;
+    }
+
+    el.innerHTML = news.map(item => {
+      const date = item.date ? new Date(item.date).toLocaleString('zh-TW', {
+        timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+      }) : '';
+      return `<div class="news-item">
+        <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
+        <div class="news-meta">
+          <span class="news-source">${item.source}</span>
+          ${date ? `<span style="margin-left:12px;">${date}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div style="color:#f85149;padding:20px 0;">新聞載入失敗：${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// Actions
+// ═══════════════════════════════════════════════
+
+async function searchStock() {
+  const input = document.getElementById('stockInput');
+  const query = input.value.trim();
+  if (!query) return;
+
+  // Try to match as code first
+  const codeMatch = query.match(/\d{4,6}/);
+  const code = codeMatch ? codeMatch[0] : query;
+
+  // Add to watchlist if not already
+  if (!STATE.watchlist.includes(code)) {
+    STATE.watchlist.push(code);
+    saveWatchlist();
+  }
+
+  input.value = '';
+  selectStock(code);
+  renderQuickStocks();
+}
+
+function addToWatchlist() {
+  const input = document.getElementById('addStockInput');
+  const code = input.value.trim();
+  if (!code) return;
+
+  if (!STATE.watchlist.includes(code)) {
+    STATE.watchlist.push(code);
+    saveWatchlist();
+    renderQuickStocks();
+    renderWatchlist();
+  }
+  input.value = '';
+  closeModal('addModal');
+  selectStock(code);
+}
+
+function removeFromWatchlist(code) {
+  STATE.watchlist = STATE.watchlist.filter(c => c !== code);
+  saveWatchlist();
+  renderQuickStocks();
+  renderWatchlist();
+  if (STATE.selectedCode === code) {
+    STATE.selectedCode = STATE.watchlist[0] || null;
+    if (STATE.selectedCode) selectStock(STATE.selectedCode);
+    else document.getElementById('stockDetail').innerHTML =
+      '<div style="color:#484f58;text-align:center;padding:40px 0;">在上方搜尋股號或點擊快速查詢</div>';
+  }
+}
+
+async function addPortfolio() {
+  const code = document.getElementById('portfolioCode').value.trim();
+  const shares = parseInt(document.getElementById('portfolioShares').value);
+  const price = parseFloat(document.getElementById('portfolioPrice').value);
+  if (!code || !shares || !price) { showAlert('請填寫完整資料'); return; }
+
+  STATE.portfolio.push({ code, shares, price: Math.round(price * 100) / 100 });
+  savePortfolio();
+  renderPortfolio();
+  closeModal('portfolioModal');
+
+  document.getElementById('portfolioCode').value = '';
+  document.getElementById('portfolioShares').value = '';
+  document.getElementById('portfolioPrice').value = '';
+
+  if (!STATE.stocks[code]) {
+    const [data, name] = await Promise.all([
+      fetchStockPrice(code),
+      fetchStockName(code)
+    ]);
+    if (data) {
+      data.name = name;
+      STATE.stocks[code] = data;
+    }
+    renderPortfolio();
+  }
+}
+
+function removePortfolio(index) {
+  STATE.portfolio.splice(index, 1);
+  savePortfolio();
+  renderPortfolio();
+}
+
+async function refreshAll() {
+  STATE.stocks = {};
+  renderQuickStocks();
+  renderWatchlist();
+  if (STATE.selectedCode) renderStockDetail(STATE.selectedCode);
+  if (STATE.portfolio.length > 0) {
+    for (const item of STATE.portfolio) {
+      const [data, name] = await Promise.all([
+        fetchStockPrice(item.code),
+        fetchStockName(item.code)
+      ]);
+      if (data) {
+        data.name = name;
+        STATE.stocks[item.code] = data;
+      }
+    }
+    renderPortfolio();
+    renderQuickStocks();
+    renderWatchlist();
+  }
+  renderNews();
+}
+
+// ═══════════════════════════════════════════════
+// Persistence
+// ═══════════════════════════════════════════════
+function saveWatchlist() {
+  localStorage.setItem('lucas_w
+function saveWatchlist() {
+  localStorage.setItem('lucas_watchlist', JSON.stringify(STATE.watchlist));
+}
+function savePortfolio() {
+  localStorage.setItem('lucas_portfolio', JSON.stringify(STATE.portfolio));
+}
+
+// ═══════════════════════════════════════════════
+// Clock
+// ═══════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const tw = now.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
+  document.getElementById('currentTime').textContent = `🕐 ${tw}`;
+  updateMarketBadge();
+}
+
+// ═══════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════
+async function init() {
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // Load watchlist stocks
+  for (const code of STATE.watchlist) {
+    const [data, name] = await Promise.all([
+      fetchStockPrice(code),
+      fetchStockName(code)
+    ]);
+    if (data) {
+      data.name = name;
+      STATE.stocks[code] = data;
+    }
+  }
+
+  // Load portfolio stocks not already in watchlist
+  for (const item of STATE.portfolio) {
+    if (!STATE.stocks[item.code]) {
+      const [data, name] = await Promise.all([
+        fetchStockPrice(item.code),
+        fetchStockName(item.code)
+      ]);
+      if (data) {
+        data.name = name;
+        STATE.stocks[item.code] = data;
+      }
+    }
+  }
+
+  renderQuickStocks();
+  renderWatchlist();
+  renderPortfolio();
+  renderNews();
+
+  if (STATE.watchlist.length > 0) {
+    selectStock(STATE.watchlist[0]);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
